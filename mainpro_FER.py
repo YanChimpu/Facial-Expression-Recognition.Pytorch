@@ -33,8 +33,8 @@ best_PrivateTest_acc_epoch = 0
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 learning_rate_decay_start = 80  # 50
-learning_rate_decay_every = 5 # 5
-learning_rate_decay_rate = 0.9 # 0.9
+learning_rate_decay_every = 5  # 5
+learning_rate_decay_rate = 0.9  # 0.9
 
 cut_size = 44
 total_epoch = 250
@@ -54,24 +54,24 @@ transform_test = transforms.Compose([
     transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
 ])
 
-trainset = FER2013(split = 'Training', transform=transform_train)
+trainset = FER2013(split='Training', transform=transform_train)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=opt.bs, shuffle=True, num_workers=1)
-PublicTestset = FER2013(split = 'PublicTest', transform=transform_test)
+PublicTestset = FER2013(split='PublicTest', transform=transform_test)
 PublicTestloader = torch.utils.data.DataLoader(PublicTestset, batch_size=opt.bs, shuffle=False, num_workers=1)
-PrivateTestset = FER2013(split = 'PrivateTest', transform=transform_test)
+PrivateTestset = FER2013(split='PrivateTest', transform=transform_test)
 PrivateTestloader = torch.utils.data.DataLoader(PrivateTestset, batch_size=opt.bs, shuffle=False, num_workers=1)
 
 # Model
 if opt.model == 'VGG19':
     net = VGG('VGG19')
-elif opt.model  == 'Resnet18':
+elif opt.model == 'Resnet18':
     net = ResNet18()
 
 if opt.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir(path), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load(os.path.join(path,'PrivateTest_model.t7'))
+    checkpoint = torch.load(os.path.join(path, 'PrivateTest_model.t7'))
 
     net.load_state_dict(checkpoint['net'])
     best_PublicTest_acc = checkpoint['best_PublicTest_acc']
@@ -87,6 +87,7 @@ if use_cuda:
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=opt.lr, momentum=0.9, weight_decay=5e-4)
+
 
 # Training
 def train(epoch):
@@ -116,15 +117,16 @@ def train(epoch):
         loss.backward()
         utils.clip_gradient(optimizer, 0.1)
         optimizer.step()
-        train_loss += loss.data[0]
+        train_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
 
         utils.progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
+                           % (train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
-    Train_acc = 100.*correct/total
+    Train_acc = 100. * correct / total
+
 
 def PublicTest(epoch):
     global PublicTest_acc
@@ -143,7 +145,7 @@ def PublicTest(epoch):
         outputs = net(inputs)
         outputs_avg = outputs.view(bs, ncrops, -1).mean(1)  # avg over crops
         loss = criterion(outputs_avg, targets)
-        PublicTest_loss += loss.data[0]
+        PublicTest_loss += loss.item()
         _, predicted = torch.max(outputs_avg.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
@@ -152,7 +154,7 @@ def PublicTest(epoch):
                            % (PublicTest_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
     # Save checkpoint.
-    PublicTest_acc = 100.*correct/total
+    PublicTest_acc = 100. * correct / total
     if PublicTest_acc > best_PublicTest_acc:
         print('Saving..')
         print("best_PublicTest_acc: %0.3f" % PublicTest_acc)
@@ -163,9 +165,10 @@ def PublicTest(epoch):
         }
         if not os.path.isdir(path):
             os.mkdir(path)
-        torch.save(state, os.path.join(path,'PublicTest_model.t7'))
+        torch.save(state, os.path.join(path, 'PublicTest_model.t7'))
         best_PublicTest_acc = PublicTest_acc
         best_PublicTest_acc_epoch = epoch
+
 
 def PrivateTest(epoch):
     global PrivateTest_acc
@@ -184,31 +187,32 @@ def PrivateTest(epoch):
         outputs = net(inputs)
         outputs_avg = outputs.view(bs, ncrops, -1).mean(1)  # avg over crops
         loss = criterion(outputs_avg, targets)
-        PrivateTest_loss += loss.data[0]
+        PrivateTest_loss += loss.item()
         _, predicted = torch.max(outputs_avg.data, 1)
         total += targets.size(0)
         correct += predicted.eq(targets.data).cpu().sum()
 
         utils.progress_bar(batch_idx, len(PublicTestloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            % (PrivateTest_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+                           % (PrivateTest_loss / (batch_idx + 1), 100. * correct / total, correct, total))
     # Save checkpoint.
-    PrivateTest_acc = 100.*correct/total
+    PrivateTest_acc = 100. * correct / total
 
     if PrivateTest_acc > best_PrivateTest_acc:
         print('Saving..')
         print("best_PrivateTest_acc: %0.3f" % PrivateTest_acc)
         state = {
             'net': net.state_dict() if use_cuda else net,
-	        'best_PublicTest_acc': best_PublicTest_acc,
+            'best_PublicTest_acc': best_PublicTest_acc,
             'best_PrivateTest_acc': PrivateTest_acc,
-    	    'best_PublicTest_acc_epoch': best_PublicTest_acc_epoch,
+            'best_PublicTest_acc_epoch': best_PublicTest_acc_epoch,
             'best_PrivateTest_acc_epoch': epoch,
         }
         if not os.path.isdir(path):
             os.mkdir(path)
-        torch.save(state, os.path.join(path,'PrivateTest_model.t7'))
+        torch.save(state, os.path.join(path, 'PrivateTest_model.t7'))
         best_PrivateTest_acc = PrivateTest_acc
         best_PrivateTest_acc_epoch = epoch
+
 
 for epoch in range(start_epoch, total_epoch):
     train(epoch)
